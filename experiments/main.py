@@ -8,6 +8,8 @@ import tensorflow as tf
 import math, os
 from PIL import Image
 
+mx.set_default_device(mx.cpu)
+
 DEBUG = os.getenv("DEBUG", "0") == "1"
 COMPARE = os.getenv("COMPARE", "0") == "1"
 
@@ -52,25 +54,6 @@ def init_tensor(model: tflite.Model, tensor: tflite.Tensor):
         if o != 0
         else None
     )
-
-
-op_options = {
-    tflite.BuiltinOperator.FULLY_CONNECTED: tflite.FullyConnectedOptions,
-    tflite.BuiltinOperator.MUL: tflite.MulOptions,
-    tflite.BuiltinOperator.ADD: tflite.AddOptions,
-    tflite.BuiltinOperator.SUB: tflite.SubOptions,
-    tflite.BuiltinOperator.TRANSPOSE: tflite.TransposeOptions,
-    tflite.BuiltinOperator.SOFTMAX: tflite.SoftmaxOptions,
-    tflite.BuiltinOperator.STRIDED_SLICE: tflite.StridedSliceOptions,
-    tflite.BuiltinOperator.BATCH_MATMUL: tflite.BatchMatMulOptions,
-    tflite.BuiltinOperator.GELU: tflite.GeluOptions,
-    tflite.BuiltinOperator.SQUARED_DIFFERENCE: tflite.SquaredDifferenceOptions,
-    tflite.BuiltinOperator.CONV_2D: tflite.Conv2DOptions,
-    tflite.BuiltinOperator.CONCATENATION: tflite.ConcatenationOptions,
-    tflite.BuiltinOperator.RESHAPE: tflite.ReshapeOptions,
-    tflite.BuiltinOperator.PAD: tflite.PadOptions,
-    tflite.BuiltinOperator.MAX_POOL_2D: tflite.Pool2DOptions,
-}
 
 def handleFusedActivationFunction(a: mx.array, func: int):
     assert func in [0, 1], f"unsupported activation function={func}"
@@ -155,6 +138,20 @@ def fully_connected(inputs: List[mx.array], options: tflite.FullyConnectedOption
         temp = inputs[0] @ inputs[1].T
     return handleFusedActivationFunction(temp, options.FusedActivationFunction())
 
+def reshape(ins: List[mx.array], options: tflite.ReshapeOptions):
+    if DEBUG:
+        print(f"\tRESHAPE: in={ins[0].shape} shape={ins[1].tolist()}")
+    return mx.reshape(ins[0], ins[1].tolist())
+
+def concat(ins: List[mx.array], options: tflite.ConcatenationOptions):
+    if DEBUG:
+        print(f"\tCONCAT: in={len(ins)} axis={options.Axis()}")
+    return mx.concatenate(ins, axis=options.Axis())
+
+def squared_difference(ins: List[mx.array], options: tflite.SquaredDifferenceOptions):
+    if DEBUG:
+        print(f"\tSQUARED_DIFFERENCE: in={ins[0].shape} {ins[1].shape}")
+    return mx.square(ins[0] - ins[1])
 
 op_funcs = {
     tflite.BuiltinOperator.CONV_2D: conv2d,
@@ -164,8 +161,29 @@ op_funcs = {
     tflite.BuiltinOperator.MAX_POOL_2D: max_pool2d,
     tflite.BuiltinOperator.ADD: add,
     tflite.BuiltinOperator.FULLY_CONNECTED: fully_connected,
+    tflite.BuiltinOperator.RESHAPE: reshape,
+    tflite.BuiltinOperator.CONCATENATION: concat,
+    tflite.BuiltinOperator.SQUARED_DIFFERENCE: squared_difference,
 }
 
+op_options = {
+    tflite.BuiltinOperator.FULLY_CONNECTED: tflite.FullyConnectedOptions,
+    tflite.BuiltinOperator.MUL: tflite.MulOptions,
+    tflite.BuiltinOperator.ADD: tflite.AddOptions,
+    tflite.BuiltinOperator.SUB: tflite.SubOptions,
+    tflite.BuiltinOperator.TRANSPOSE: tflite.TransposeOptions,
+    tflite.BuiltinOperator.SOFTMAX: tflite.SoftmaxOptions,
+    tflite.BuiltinOperator.STRIDED_SLICE: tflite.StridedSliceOptions,
+    tflite.BuiltinOperator.BATCH_MATMUL: tflite.BatchMatMulOptions,
+    tflite.BuiltinOperator.GELU: tflite.GeluOptions,
+    tflite.BuiltinOperator.SQUARED_DIFFERENCE: tflite.SquaredDifferenceOptions,
+    tflite.BuiltinOperator.CONV_2D: tflite.Conv2DOptions,
+    tflite.BuiltinOperator.CONCATENATION: tflite.ConcatenationOptions,
+    tflite.BuiltinOperator.RESHAPE: tflite.ReshapeOptions,
+    tflite.BuiltinOperator.PAD: tflite.PadOptions,
+    tflite.BuiltinOperator.MAX_POOL_2D: tflite.Pool2DOptions,
+    tflite.BuiltinOperator.SQUARED_DIFFERENCE: tflite.SquaredDifferenceOptions,
+}
 
 def init_arrays(model: tflite.Model, graph: tflite.SubGraph):
     for i in range(graph.TensorsLength()):
@@ -282,20 +300,27 @@ def compare_tensors(path: str):
                 print(f"tensor not found: {i}")
 
 np.random.seed(0)
-
+import time
 if __name__ == "__main__":
     path = "./ResNet50.tflite"
     # compare_tensors(path)
     # exit()
-    img = os.getenv("IMG", "car.jpg")
-    img = np.array(Image.open(img).resize((224, 224))).astype(np.float32)
-    img = (img - 127.5) / 127.5
-    img = np.expand_dims(img, axis=0)
-    inputs = [img] #[np.random.random((1, 224, 224, 3)).astype(np.float32)]
+    # img = os.getenv("IMG", "car.jpg")
+    # img = np.array(Image.open(img).resize((224, 224))).astype(np.float32)
+    # img = (img - 127.5) / 127.5
+    # img = np.expand_dims(img, axis=0)
+    inputs = [np.ones((1, 224, 224, 3), dtype=np.float32)] #[np.random.random((1, 224, 224, 3)).astype(np.float32)]
+    
+    tfstart = time.perf_counter()
     tfpred = run_tf(path, inputs)
-    mxpred = run_mx(path, inputs)
-    tfpred = tf.argmax(tfpred[0])
-    mxpred = mx.argmax(mxpred[0]).item()
+    tfpred = tfpred[0]
+    tfend = time.perf_counter() - tfstart
 
-    print(tfpred, mxpred)
-    print(labels[tfpred], labels[mxpred])
+    mxstart = time.perf_counter()
+    mxpred = run_mx(path, inputs)
+    mxpred = np.array(mxpred[0])
+    mxend = time.perf_counter() - mxstart
+    np.testing.assert_allclose(np.expand_dims(tfpred, axis=0), mxpred, rtol=1e-3, atol=1e-3)
+
+    print(f"TF: {tfend:.4f} MX: {mxend:.4f}")
+    # print(labels[tfpred], labels[mxpred])
