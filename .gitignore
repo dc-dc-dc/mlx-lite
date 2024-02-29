@@ -1,0 +1,6 @@
+*.tflite
+*.jpeg
+*.jpg
+*.txt
+
+venv/
