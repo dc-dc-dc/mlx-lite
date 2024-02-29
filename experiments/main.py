@@ -189,10 +189,6 @@ def init_arrays(model: tflite.Model, graph: tflite.SubGraph):
     for i in range(graph.TensorsLength()):
         tensors[i] = init_tensor(model, graph.Tensors(i))
 
-labels = []
-with open("./imagenet_labels.txt", "r") as f:
-    labels = [l.strip() for l in f.readlines()]
-
 
 def run_mx(path: str, inputs: np.ndarray):
     with open(path, "rb") as f:
@@ -203,7 +199,6 @@ def run_mx(path: str, inputs: np.ndarray):
 
 # TODO Remove this.
 tfmodel: tf.lite.Interpreter = None
-
 def run_tf(path: str, input: np.ndarray):
     global tfmodel
     tfmodel = tf.lite.Interpreter(model_path=path)
@@ -323,4 +318,7 @@ if __name__ == "__main__":
     np.testing.assert_allclose(np.expand_dims(tfpred, axis=0), mxpred, rtol=1e-3, atol=1e-3)
 
     print(f"TF: {tfend:.4f} MX: {mxend:.4f}")
+    # labels = []
+    # with open("./imagenet_labels.txt", "r") as f:
+    #     labels = [l.strip() for l in f.readlines()]
     # print(labels[tfpred], labels[mxpred])
