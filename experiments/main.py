@@ -55,6 +55,7 @@ def init_tensor(model: tflite.Model, tensor: tflite.Tensor):
         else None
     )
 
+# 0 = None, 1 = Relu
 def handleFusedActivationFunction(a: mx.array, func: int):
     assert func in [0, 1], f"unsupported activation function={func}"
 
