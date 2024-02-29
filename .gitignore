@@ -1,6 +1,6 @@
 *.tflite
 *.jpeg
 *.jpg
-*.txt
+imagenet_labels.txt
 
 venv/
