@@ -3,7 +3,7 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 import flatbuffers
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import tensorflow as tf
 import math, os
 from PIL import Image
@@ -80,15 +80,6 @@ def mean(inputs: List[mx.array]):
         print(f"\tMEAN input={inputs[0].shape} axis={inputs[1].tolist()}")
     return mx.mean(inputs[0], axis=inputs[1].tolist())
 
-def _pad(x_shape: Tuple[int], filter_shape: Tuple[int], pad: bool):
-    padding = [0, 0]
-    if pad:
-        if (off := x_shape[1] % filter_shape[1]) != 0:
-            padding[0] = math.ceil(off / 2)
-        if (off := x_shape[2] % filter_shape[1]) != 0:
-            padding[1] = math.ceil(off / 2)
-    return padding
-
 def conv2d(inputs: List[mx.array], options: tflite.Conv2DOptions):
     temp = inputs[0]
     filter = inputs[1]
@@ -98,12 +89,24 @@ def conv2d(inputs: List[mx.array], options: tflite.Conv2DOptions):
     if inputs[0].ndim != 4:
         expanded = True
         temp = mx.expand_dims(temp, axis=0)
+    padding = [0, 0]
+    if options.Padding() == 0:
+        _is = temp.shape
+        _fs = filter.shape
+        padding = [0, 0]
+        if (off := _is[1] % _fs[1]) != 0:
+            padding[0] = math.ceil(off / 2)
+        if (off := _is[2] % _fs[1]) != 0:
+            padding[1] = math.ceil(off / 2)
+        # if previous doesn't work, try this
+        if padding == [0, 0] and (options.StrideH() == 1 and options.StrideW() == 1):
+            padding[0] = math.ceil((_fs[1] - 1) / 2)
+            padding[1] = math.ceil((_fs[2] - 1) / 2)
+
     if DEBUG:
         print(
-            f"\tCONV_2D: in={temp.shape} filter={filter.shape} expanded={expanded} stride=({options.StrideH()}, {options.StrideW()}) padding={options.Padding()} func={options.FusedActivationFunction()}"
+            f"\tCONV_2D: in={temp.shape} filter={filter.shape} expanded={expanded} stride=({options.StrideH()}, {options.StrideW()}) padding={padding} dilation={options.DilationHFactor(), options.DilationWFactor()} func={options.FusedActivationFunction()}"
         )
-    padding = _pad(temp.shape, filter.shape, options.Padding() == 0)
-    
     temp = mx.conv2d(
         temp, filter, stride=(options.StrideH(), options.StrideW()), padding=padding
     )
@@ -278,6 +281,9 @@ def maximum(ins: List[mx.array], options: tflite.MaximumMinimumOptions):
         print(f"\tMAXIMUM: in={ins[0].shape} {ins[1].shape}")
     return mx.maximum(ins[0], ins[1])
 
+def gather(ins: List[mx.array], options: tflite.GatherOptions):
+    print(f"\tGATHER: in={ins[0].shape} indices={ins[1].tolist()} axis={options.Axis()} batch_dims={options.BatchDims()}")
+    return mx.take(ins[0], ins[1], axis=options.Axis())
 
 op_funcs = {
     tflite.BuiltinOperator.MUL: mul,
@@ -304,6 +310,7 @@ op_funcs = {
     tflite.BuiltinOperator.SUM: _sum,
     tflite.BuiltinOperator.MINIMUM: minimum,
     tflite.BuiltinOperator.MAXIMUM: maximum,
+    tflite.BuiltinOperator.GATHER: gather,
 }
 
 op_options = {
@@ -328,6 +335,7 @@ op_options = {
     tflite.BuiltinOperator.BROADCAST_TO: tflite.BroadcastToOptions,
     tflite.BuiltinOperator.MINIMUM: tflite.MaximumMinimumOptions,
     tflite.BuiltinOperator.MAXIMUM: tflite.MaximumMinimumOptions,
+    tflite.BuiltinOperator.GATHER: tflite.GatherOptions,
 }
 
 
@@ -428,14 +436,14 @@ class SubGraph:
                     )
                 if t.shape != v.shape:
                     v = mx.reshape(v, t.shape)
-                if COMPARE:
-                    print(f"Checking if equal to tf")
-                    tftensor = tfmodel.get_tensor(op.Outputs(j))
-                    if tftensor.shape != v.shape:
-                        print(f"shape mismatch: tf={tftensor.shape} mx={v.shape}")
-                    np.testing.assert_allclose(
-                        tftensor, np.array(v), rtol=1e-3, atol=1e-3
-                    )
+                # TODO: This does not work with intermediate tensors as tf releases them after invoke
+                # if COMPARE:
+                #     tftensor = tfmodel.get_tensor(op.Outputs(j))
+                #     if tftensor.shape != v.shape:
+                #         print(f"shape mismatch: tf={tftensor.shape} mx={v.shape}")
+                #     np.testing.assert_allclose(
+                #         tftensor, np.array(v), rtol=1e-3, atol=1e-3
+                #     )
                 tensors[op.Outputs(j)] = v
         return [
             tensors[self.graph.Outputs(i)] for i in range(self.graph.OutputsLength())
@@ -470,7 +478,8 @@ np.random.seed(0)
 import time
 
 if __name__ == "__main__":
-    path = "./StyleGAN2.tflite"
+    path = os.getenv("MODEL", "./StyleGAN2.tflite")
+    print(f"Running model={path}")
     # compare_tensors(path)
     # exit()
     # img = os.getenv("IMG", "car.jpg")
@@ -479,23 +488,26 @@ if __name__ == "__main__":
     # img = np.expand_dims(img, axis=0)
     inputs = [
         # img
-        np.ones((1, 512), dtype=np.float32)
+        np.ones((1, 1), dtype=np.int32)
     ]  # [np.random.random((1, 224, 224, 3)).astype(np.float32)]
 
-    tfstart = time.perf_counter()
-    tfpred = run_tf(path, inputs)
-    tfpred = tfpred[0]
-    tfend = time.perf_counter() - tfstart
+    if COMPARE:
+        tfstart = time.perf_counter()
+        tfpred = run_tf(path, inputs)
+        tfpred = tfpred[0]
+        tfend = time.perf_counter() - tfstart
 
     mxstart = time.perf_counter()
     mxpred = run_mx(path, inputs)
     mxpred = np.array(mxpred[0])
     mxend = time.perf_counter() - mxstart
-    np.testing.assert_allclose(
-        np.expand_dims(tfpred, axis=0), mxpred, rtol=1e-3, atol=1e-3
-    )
-
-    print(f"TF: {tfend:.4f} MX: {mxend:.4f}")
+    if COMPARE:
+        np.testing.assert_allclose(
+            np.expand_dims(tfpred, axis=0), mxpred, rtol=1e-3, atol=1e-3
+        )
+        print("OUTPUTS MATCHED! 🚀")
+        print(f"TF: {tfend:.4f} MX: {mxend:.4f}")
+    
     print(f"{mxpred.shape}")
     if False:
         tfpred = np.argmax(tfpred)
