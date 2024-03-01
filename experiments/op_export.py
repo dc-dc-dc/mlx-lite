@@ -10,7 +10,8 @@ if __name__ == "__main__":
     model = tf.keras.models.Sequential([
         tf.keras.Input(shape=(8, 8, 1)),
         # tf.keras.layers.Dense(units=32, use_bias=True, bias_initializer="ones"),
-        tf.keras.layers.Conv2D(2, 3,)# activation="relu"),
+        # tf.keras.layers.Conv2D(2, 3,)# activation="relu"),
+        tf.keras.layers.Softmax(),
     ])
     out = tf.lite.TFLiteConverter.from_keras_model(model).convert()
 
