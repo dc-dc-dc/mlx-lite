@@ -10,7 +10,7 @@ if ! [ -x "$(command -v flatc)" ]; then
   exit 1
 fi
 
-version="2.13"
+version="2.15"
 if [ ! -f "schema.fbs" ]; then
   echo "Info: Downloading schema.fbs from TensorFlow repository version: ${version}"
   wget https://raw.githubusercontent.com/tensorflow/tensorflow/r${version}/tensorflow/lite/schema/schema.fbs
