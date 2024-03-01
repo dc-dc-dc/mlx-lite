@@ -234,6 +234,14 @@ def gelu(ins: List[mx.array], options: tflite.GeluOptions):
         print(f"\tGELU: len={len(ins)}")
     return nn.gelu_approx(ins[0]) if options.Approximate() else nn.gelu(ins[0]) 
 
+def resize_nearest_neighbor(ins: List[mx.array], options: tflite.ResizeNearestNeighborOptions):
+    assert len(ins) == 2
+    if DEBUG:
+        print(f"\tRESIZE_NEAREST_NEIGHBOR: in={ins[0].shape} new_shape={ins[1].tolist()} align_corners={options.AlignCorners()} half_pixel_centers={options.HalfPixelCenters()}")
+
+    scale_factor = [n // i for i, n in zip(ins[0].shape[1:-1], ins[1].tolist())]
+    return nn.Upsample(scale_factor=scale_factor, mode="nearest")(ins[0])
+
 op_funcs = {
     tflite.BuiltinOperator.MUL: mul,
     tflite.BuiltinOperator.SUB: sub,
@@ -252,6 +260,7 @@ op_funcs = {
     tflite.BuiltinOperator.BATCH_MATMUL: batch_matmul,
     tflite.BuiltinOperator.SOFTMAX: softmax,
     tflite.BuiltinOperator.GELU: gelu,
+    tflite.BuiltinOperator.RESIZE_NEAREST_NEIGHBOR: resize_nearest_neighbor,
 }
 
 op_options = {
@@ -270,6 +279,7 @@ op_options = {
     tflite.BuiltinOperator.RESHAPE: tflite.ReshapeOptions,
     tflite.BuiltinOperator.PAD: tflite.PadOptions,
     tflite.BuiltinOperator.MAX_POOL_2D: tflite.Pool2DOptions,
+    tflite.BuiltinOperator.RESIZE_NEAREST_NEIGHBOR: tflite.ResizeNearestNeighborOptions,
 }
 
 
@@ -412,16 +422,16 @@ np.random.seed(0)
 import time
 
 if __name__ == "__main__":
-    path = "./VIT.tflite"
+    path = "./FFNet-40S.tflite"
     # compare_tensors(path)
     # exit()
-    img = os.getenv("IMG", "car.jpg")
-    img = np.array(Image.open(img).resize((224, 224))).astype(np.float32)
-    img = (img - 127.5) / 127.5
-    img = np.expand_dims(img, axis=0)
+    # img = os.getenv("IMG", "car.jpg")
+    # img = np.array(Image.open(img).resize((224, 224))).astype(np.float32)
+    # img = (img - 127.5) / 127.5
+    # img = np.expand_dims(img, axis=0)
     inputs = [
-        img
-        # np.ones((1, 224, 224, 3), dtype=np.float32)
+        # img
+        np.ones((1, 1024, 2048, 3), dtype=np.float32)
     ]  # [np.random.random((1, 224, 224, 3)).astype(np.float32)]
 
     tfstart = time.perf_counter()
@@ -438,7 +448,8 @@ if __name__ == "__main__":
     )
 
     print(f"TF: {tfend:.4f} MX: {mxend:.4f}")
-    if True:
+    print(f"{mxpred.shape}")
+    if False:
         tfpred = np.argmax(tfpred)
         mxpred = np.argmax(mxpred)
         # print(f"TF: {tfpred} MX: {mxpred}")
