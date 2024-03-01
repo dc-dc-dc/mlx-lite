@@ -3,7 +3,7 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 import flatbuffers
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import tensorflow as tf
 import math, os
 from PIL import Image
@@ -80,6 +80,14 @@ def mean(inputs: List[mx.array]):
         print(f"\tMEAN input={inputs[0].shape} axis={inputs[1].tolist()}")
     return mx.mean(inputs[0], axis=inputs[1].tolist())
 
+def _pad(x_shape: Tuple[int], filter_shape: Tuple[int], pad: bool):
+    padding = [0, 0]
+    if pad:
+        if (off := x_shape[1] % filter_shape[1]) != 0:
+            padding[0] = math.ceil(off / 2)
+        if (off := x_shape[2] % filter_shape[1]) != 0:
+            padding[1] = math.ceil(off / 2)
+    return padding
 
 def conv2d(inputs: List[mx.array], options: tflite.Conv2DOptions):
     temp = inputs[0]
@@ -94,15 +102,8 @@ def conv2d(inputs: List[mx.array], options: tflite.Conv2DOptions):
         print(
             f"\tCONV_2D: in={temp.shape} filter={filter.shape} expanded={expanded} stride=({options.StrideH()}, {options.StrideW()}) padding={options.Padding()} func={options.FusedActivationFunction()}"
         )
-    padding = 0
-    if options.Padding() == 0:
-        _is = temp.shape
-        _fs = filter.shape
-        padding = [0, 0]
-        if (off := _is[1] % _fs[1]) != 0:
-            padding[0] = math.ceil(off / 2)
-        if (off := _is[2] % _fs[1]) != 0:
-            padding[1] = math.ceil(off / 2)
+    padding = _pad(temp.shape, filter.shape, options.Padding() == 0)
+    
     temp = mx.conv2d(
         temp, filter, stride=(options.StrideH(), options.StrideW()), padding=padding
     )
@@ -242,6 +243,42 @@ def resize_nearest_neighbor(ins: List[mx.array], options: tflite.ResizeNearestNe
     scale_factor = [n // i for i, n in zip(ins[0].shape[1:-1], ins[1].tolist())]
     return nn.Upsample(scale_factor=scale_factor, mode="nearest")(ins[0])
 
+def leaky_relu(ins: List[mx.array], options: tflite.LeakyReluOptions):
+    if DEBUG:
+        print(f"\tLEAKY_RELU: in={ins[0].shape} alpha={options.Alpha()}")
+    return nn.leaky_relu(ins[0], options.Alpha())
+
+def tile(ins: List[mx.array], options: tflite.TileOptions):
+    assert len(ins) == 2
+    if DEBUG:
+        print(f"\tTILE: in={ins[0].shape} tile={ins[1].tolist()}")
+    return mx.tile(ins[0], ins[1].tolist())
+
+def broadcast_to(ins: List[mx.array], options: tflite.BroadcastToOptions):
+    assert len(ins) == 2
+    if DEBUG:
+        print(f"\tBROADCAST_TO: in={ins[0].shape} target_shape={ins[1].tolist()}")
+    return mx.broadcast_to(ins[0], ins[1].tolist())
+
+def _sum(ins: List[mx.array]):
+    assert len(ins) == 2
+    if DEBUG:
+        print(f"\tSUM: in={ins[0].shape} axis={ins[1].tolist()}")
+    return mx.sum(ins[0], axis=ins[1].tolist())
+
+def minimum(ins: List[mx.array], options: tflite.MaximumMinimumOptions):
+    assert len(ins) == 2
+    if DEBUG:
+        print(f"\tMINIMUM: in={ins[0].shape} {ins[1].shape}")
+    return mx.minimum(ins[0], ins[1])
+
+def maximum(ins: List[mx.array], options: tflite.MaximumMinimumOptions):
+    assert len(ins) == 2
+    if DEBUG:
+        print(f"\tMAXIMUM: in={ins[0].shape} {ins[1].shape}")
+    return mx.maximum(ins[0], ins[1])
+
+
 op_funcs = {
     tflite.BuiltinOperator.MUL: mul,
     tflite.BuiltinOperator.SUB: sub,
@@ -261,6 +298,12 @@ op_funcs = {
     tflite.BuiltinOperator.SOFTMAX: softmax,
     tflite.BuiltinOperator.GELU: gelu,
     tflite.BuiltinOperator.RESIZE_NEAREST_NEIGHBOR: resize_nearest_neighbor,
+    tflite.BuiltinOperator.LEAKY_RELU: leaky_relu,
+    tflite.BuiltinOperator.TILE: tile,
+    tflite.BuiltinOperator.BROADCAST_TO: broadcast_to,
+    tflite.BuiltinOperator.SUM: _sum,
+    tflite.BuiltinOperator.MINIMUM: minimum,
+    tflite.BuiltinOperator.MAXIMUM: maximum,
 }
 
 op_options = {
@@ -280,6 +323,11 @@ op_options = {
     tflite.BuiltinOperator.PAD: tflite.PadOptions,
     tflite.BuiltinOperator.MAX_POOL_2D: tflite.Pool2DOptions,
     tflite.BuiltinOperator.RESIZE_NEAREST_NEIGHBOR: tflite.ResizeNearestNeighborOptions,
+    tflite.BuiltinOperator.LEAKY_RELU: tflite.LeakyReluOptions,
+    tflite.BuiltinOperator.TILE: tflite.TileOptions,
+    tflite.BuiltinOperator.BROADCAST_TO: tflite.BroadcastToOptions,
+    tflite.BuiltinOperator.MINIMUM: tflite.MaximumMinimumOptions,
+    tflite.BuiltinOperator.MAXIMUM: tflite.MaximumMinimumOptions,
 }
 
 
@@ -422,7 +470,7 @@ np.random.seed(0)
 import time
 
 if __name__ == "__main__":
-    path = "./FFNet-40S.tflite"
+    path = "./StyleGAN2.tflite"
     # compare_tensors(path)
     # exit()
     # img = os.getenv("IMG", "car.jpg")
@@ -431,7 +479,7 @@ if __name__ == "__main__":
     # img = np.expand_dims(img, axis=0)
     inputs = [
         # img
-        np.ones((1, 1024, 2048, 3), dtype=np.float32)
+        np.ones((1, 512), dtype=np.float32)
     ]  # [np.random.random((1, 224, 224, 3)).astype(np.float32)]
 
     tfstart = time.perf_counter()
