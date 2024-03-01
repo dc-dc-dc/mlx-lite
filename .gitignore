@@ -3,4 +3,6 @@
 *.jpg
 imagenet_labels.txt
 
+.vscode/
+.build/
 venv/
