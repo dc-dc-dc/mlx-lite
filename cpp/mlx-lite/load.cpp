@@ -155,7 +155,7 @@ void set_inputs(const tflite::Model *model,
 }
 
 std::vector<array> get_outputs(std::unordered_map<int, array> &arrays,
-                                const flatbuffers::Vector<int32_t> *outputs) {
+                               const flatbuffers::Vector<int32_t> *outputs) {
   std::vector<array> outs;
   for (int i = 0; i < outputs->size(); i++) {
     auto index = outputs->Get(i);
@@ -167,11 +167,118 @@ std::vector<array> get_outputs(std::unordered_map<int, array> &arrays,
   return outs;
 }
 
+std::vector<int> to_int_list(array x) {
+  std::vector<int> result;
+  switch (x.dtype()) {
+  case int32: {
+    auto data = x.data<int>();
+    for (int i = 0; i < x.size(); i++) {
+      result.push_back(x.data<int>()[i]);
+    }
+    break;
+  }
+  default: {
+    throw std::runtime_error("[to_int_list] Unsupported dtype");
+  }
+  }
+  return result;
+}
+
+array relu(array in) { return maximum(in, array(0)); }
+array leaky_relu(array in, float alpha) { return maximum(in, in * alpha); }
+
+array handleFused(array in, tflite::ActivationFunctionType type) {
+  switch (type) {
+  case tflite::ActivationFunctionType_NONE:
+    return in;
+  case tflite::ActivationFunctionType_RELU:
+    return relu(in);
+  default:
+    throw std::runtime_error("[handleFused] Unsupported activation function");
+  }
+}
+
+array op_add(std::vector<array> ins, const tflite::AddOptions *options) {
+  auto temp = add(ins[0], ins[1]);
+  return handleFused(temp, options->fused_activation_function());
+}
+
+array op_sub(std::vector<array> ins, const tflite::SubOptions *options) {
+  auto temp = subtract(ins[0], ins[1]);
+  return handleFused(temp, options->fused_activation_function());
+}
+
+array op_mul(std::vector<array> ins, const tflite::MulOptions *options) {
+  auto temp = multiply(ins[0], ins[1]);
+  return handleFused(temp, options->fused_activation_function());
+}
+
+array op_divide(std::vector<array> ins, const tflite::DivOptions *options) {
+  auto temp = divide(ins[0], ins[1]);
+  return handleFused(temp, options->fused_activation_function());
+}
+
+array fully_connected(std::vector<array> ins,
+                      const tflite::FullyConnectedOptions *options) {
+  if (ins.size() == 3 && ins[2].size() > 0) {
+    return handleFused(addmm(ins[2], ins[0], transpose(ins[1])),
+                       options->fused_activation_function());
+  }
+  return handleFused(matmul(ins[0], transpose(ins[1])),
+                     options->fused_activation_function());
+}
+
 std::vector<array> run_op(tflite::BuiltinOperator code, std::vector<array> ins,
                           const tflite::Operator *op) {
+  // NOTE: There is no checks here, it is assumed that the input shapes are
+  // correct
   switch (code) {
+  case tflite::BuiltinOperator_RELU:
+    return {relu(ins[0])};
+  case tflite::BuiltinOperator_LEAKY_RELU:
+    return {
+        leaky_relu(ins[0], op->builtin_options_as_LeakyReluOptions()->alpha())};
   case tflite::BuiltinOperator_SOFTMAX:
     return {softmax(ins[0], -1)};
+  case tflite::BuiltinOperator_ADD:
+    return {op_add(ins, op->builtin_options_as_AddOptions())};
+  case tflite::BuiltinOperator_SUB:
+    return {op_sub(ins, op->builtin_options_as_SubOptions())};
+  case tflite::BuiltinOperator_MUL:
+    return {op_mul(ins, op->builtin_options_as_MulOptions())};
+  case tflite::BuiltinOperator_DIV:
+    return {op_divide(ins, op->builtin_options_as_DivOptions())};
+  case tflite::BuiltinOperator_SQUARED_DIFFERENCE:
+    return {square(subtract(ins[0], ins[1]))};
+  case tflite::BuiltinOperator_RESHAPE:
+    return {reshape(ins[0], to_int_list(ins[1]))};
+  case tflite::BuiltinOperator_CONCATENATION:
+    return {concatenate(ins,
+                        op->builtin_options_as_ConcatenationOptions()->axis())};
+  case tflite::BuiltinOperator_FULLY_CONNECTED:
+    return {
+        fully_connected(ins, op->builtin_options_as_FullyConnectedOptions())};
+  case tflite::BuiltinOperator_MEAN:
+    return {mean(ins[0], to_int_list(ins[1]))};
+  case tflite::BuiltinOperator_RSQRT:
+    return {rsqrt(ins[0])};
+  case tflite::BuiltinOperator_TRANSPOSE:
+    return {transpose(ins[0], to_int_list(ins[1]))};
+  case tflite::BuiltinOperator_BATCH_MATMUL:
+    return {matmul(ins[0], ins[1])};
+  case tflite::BuiltinOperator_TILE:
+    return {tile(ins[0], to_int_list(ins[1]))};
+  case tflite::BuiltinOperator_BROADCAST_TO:
+    return {broadcast_to(ins[0], to_int_list(ins[1]))};
+  case tflite::BuiltinOperator_SUM:
+    return {sum(ins[0], to_int_list(ins[1]))};
+  case tflite::BuiltinOperator_MINIMUM:
+    return {minimum(ins[0], ins[1])};
+  case tflite::BuiltinOperator_MAXIMUM:
+    return {maximum(ins[0], ins[1])};
+  case tflite::BuiltinOperator_GATHER:
+    return {
+        take(ins[0], ins[1], op->builtin_options_as_GatherOptions()->axis())};
   default:
     throw std::runtime_error("[run_op] Unsupported operator code");
   }
