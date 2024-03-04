@@ -12,6 +12,20 @@ TEST_CASE("test load") {
   CHECK_EQ(x.shape(), std::vector<int>({1, 8, 8, 1}));
 }
 
+TEST_CASE("test run") {
+  auto model = mlx::lite::load("../../op.tflite");
+  auto arrays = mlx::lite::load_arrays(model);
+  CHECK_EQ(arrays.size(), 2);
+  CHECK_THROWS(mlx::lite::set_inputs(model, arrays, {}));
+  CHECK_THROWS(mlx::lite::set_inputs(model, arrays, {ones({16})}));
+  CHECK_THROWS(mlx::lite::set_inputs(model, arrays, {ones({1, 8, 8})}));
+  CHECK_THROWS(mlx::lite::set_inputs(model, arrays, {ones({1, 8, 8, 1}), ones({1, 8, 8, 1})}));
+  mlx::lite::set_inputs(model, arrays, {ones({1, 8, 8, 1})});
+  auto out = mlx::lite::run_graph(model, arrays);
+  CHECK_EQ(out.size(), 1);
+  CHECK(array_equal(out[0], ones({1, 8, 8, 1})).item<bool>());
+}
+
 TEST_CASE("test resnet") {
   auto model = mlx::lite::load("../../ResNet50.tflite");
   CHECK_EQ(model->version(), 3);
