@@ -18,4 +18,5 @@ else
     echo "Info: schema.fbs already exists, utilizing existing file"
 fi
 
-flatc --swift -o Sources/MLXLite schema.fbs
+flatc --swift -o swift/Sources/MLXLite schema.fbs
+flatc --cpp -o cpp/src/ schema.fbs
