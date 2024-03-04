@@ -171,7 +171,7 @@ std::vector<array> run_op(tflite::BuiltinOperator code, std::vector<array> ins,
                           const tflite::Operator *op) {
   switch (code) {
   case tflite::BuiltinOperator_SOFTMAX:
-    return {softmax(ins[0], {-1})};
+    return {softmax(ins[0], -1)};
   default:
     throw std::runtime_error("[run_op] Unsupported operator code");
   }
