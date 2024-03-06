@@ -31,11 +31,11 @@ tensor_type_cast = {
     TensorType.UINT8: "B",
     TensorType.UINT16: "H",
     TensorType.UINT32: "I",
-    TensorType.UINT64: "Q",
+    TensorType.UINT64: "L",
     TensorType.INT8: "b",
     TensorType.INT16: "h",
     TensorType.INT32: "i",
-    TensorType.INT64: "q",
+    TensorType.INT64: "l",
     TensorType.FLOAT16: "e",
     TensorType.FLOAT32: "f",
 }
