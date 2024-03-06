@@ -23,6 +23,7 @@ from mlxlite.generated.tflite.Conv2DOptions import Conv2DOptions
 from mlxlite.generated.tflite.ResizeNearestNeighborOptions import ResizeNearestNeighborOptions
 from mlxlite.generated.tflite.ActivationFunctionType import ActivationFunctionType
 from mlxlite.generated.tflite.Padding import Padding
+from mlxlite.generated.tflite.ArgMaxOptions import ArgMaxOptions
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -125,7 +126,7 @@ def op_reshape(ins: List[mx.array], options: ReshapeOptions):
     return mx.reshape(ins[0], ins[1].tolist())
 
 def op_concat(ins: List[mx.array], options: ConcatenationOptions):
-    return mx.concat(ins, options.Axis())
+    return mx.concatenate(ins, axis=options.Axis())
 
 def op_squared_difference(ins: List[mx.array], options: SquaredDifferenceOptions):
     return mx.square(mx.subtract(ins[0], ins[1]))
@@ -155,7 +156,7 @@ def op_batch_matmul(ins: List[mx.array], options: BatchMatMulOptions):
     assert not options.AdjX(), "adj_x not supported"
     assert not options.AdjY(), "adj_y not supported"
     assert not options.AsymmetricQuantizeInputs(), "asymmetric_quantize_inputs not supported"
-    return mx.batch_matmul(ins[0], ins[1])
+    return mx.matmul(ins[0], ins[1])
 
 def op_softmax(ins: List[mx.array], options: SoftmaxOptions):
     assert options.Beta() == 1.0, "only beta of 1.0 supported"
@@ -189,8 +190,16 @@ def op_minimum(ins: List[mx.array], options: MaximumMinimumOptions):
 def op_gather(ins: List[mx.array], options: GatherOptions):
     return mx.take(ins[0], ins[1], axis=options.Axis())
 
+def op_logistic(ins: List[mx.array]):
+    return nn.sigmoid(ins[0])
+
+def op_argmax(ins: List[mx.array], options: ArgMaxOptions):
+    return mx.argmax(ins[0])
+
 op_map = {
     BuiltinOperator.ADD: (op_add, AddOptions),
+    BuiltinOperator.LOGISTIC: (op_logistic, None),
+    BuiltinOperator.ARG_MAX: (op_argmax, ArgMaxOptions),
     BuiltinOperator.SUB: (op_sub, SubOptions),
     BuiltinOperator.MUL: (op_mul, MulOptions),
     BuiltinOperator.DIV: (op_div, DivOptions),

@@ -52,6 +52,8 @@ class MXModel:
         return MXSubGraph(self, self.model.Subgraphs(index))
 
     def get_array(self, index: int) -> mx.array:
+        if index == -1:
+            return None
         if index not in self.arrays:
             raise ValueError(f"array {index} does not exist")
         return self.arrays[index]
@@ -81,12 +83,15 @@ class MXModel:
             )
         self.arrays[index] = mx.reshape(value, t.shape) if try_reshape else value
 
+    def num_graphs(self) -> int:
+        return self.model.SubgraphsLength()
+
     def get_op(self, code: int, options: Any = None):
         op_code = self.model.OperatorCodes(code).BuiltinCode()
         if op_code not in op_map:
-            raise ValueError(f"op_code={op_code} not supported")
+            raise ValueError(f"[get_op] op_code={op_code} not supported")
         (func, opt) = op_map[op_code]
-        if opt is not None:
+        if options is not None and opt is not None:
             opt = opt()
             opt.Init(options.Bytes, options.Pos)
         return func, opt
