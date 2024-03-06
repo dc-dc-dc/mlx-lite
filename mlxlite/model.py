@@ -69,8 +69,7 @@ class MXModel:
             return mx.zeros(shape, dtype)
         offset = buf._tab.Vector(o)
         count = buf._tab.VectorLen(o)
-        temp = buf._tab.Bytes[offset : offset + count]
-        return mx.array(memoryview(temp).cast(tensor_type_cast[tensor.Type()], shape).tolist(), dtype)
+        return mx.array(memoryview(buf._tab.Bytes[offset : offset + count]).cast(tensor_type_cast[tensor.Type()], shape=shape), dtype)
 
     def set_array(self, index: int, value: mx.array, try_reshape=False):
         if index not in self.arrays:
