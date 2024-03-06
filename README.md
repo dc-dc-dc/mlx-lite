@@ -21,6 +21,8 @@ res = sub([mx.array(...), mx.array(...)]) # run with array inputs
 ## Examples
 
 - [ResNet50](./examples/resnet50/README.md)
+- [FFNET](./examples/ffnet/README.md)
+- [OpenAI Clip](./examples/clip/README.md)
 
 ## Setup Flatbuffers
 
