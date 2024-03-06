@@ -20,3 +20,4 @@ fi
 
 flatc --swift -o swift/Sources/MLXLite schema.fbs
 flatc --cpp -o cpp/src/ schema.fbs
+flatc --python -o mlxlite/generated schema.fbs

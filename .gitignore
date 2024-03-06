@@ -1,8 +1,12 @@
 *.tflite
 *.jpeg
 *.jpg
+*.egg-info
 imagenet_labels.txt
 
+build/
 .vscode/
 .build/
 venv/
+
+__pycache__/
