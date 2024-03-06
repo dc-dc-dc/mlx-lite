@@ -59,12 +59,12 @@ class MXModel:
         return self.arrays[index]
     
     def init_array(self, tensor: Tensor):
-        # TODO: add this
         buf = self.model.Buffers(tensor.Buffer())
         o = flatbuffers.number_types.UOffsetTFlags.py_type(buf._tab.Offset(4))
         shape = [tensor.Shape(i) for i in range(tensor.ShapeLength())]
         if tensor.Type() not in tensor_type_map:
             raise ValueError(f"tensor type={tensor.Type()} not supported")
+        # TODO: add quantization support
         
         dtype = tensor_type_map[tensor.Type()]
         if o == 0:
