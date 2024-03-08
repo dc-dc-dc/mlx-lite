@@ -5,7 +5,7 @@ setup(
     version="0.0.1",
     author="Diogo Da Cruz",
     python_requires=">=3.8",
-    packages=["mlxlite", "mlxlite.generated.tflite", ],
+    packages=find_packages(where="mlxlite"),
     install_requires=["mlx", "flatbuffers"],
     include_package_data=True
 )
