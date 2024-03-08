@@ -58,7 +58,7 @@ class MXModel:
             raise ValueError(f"array {index} does not exist")
         return self.arrays[index]
     
-    def init_array(self, tensor: Tensor):
+    def init_array(self, i: int, tensor: Tensor):
         buf = self.model.Buffers(tensor.Buffer())
         o = flatbuffers.number_types.UOffsetTFlags.py_type(buf._tab.Offset(4))
         shape = [tensor.Shape(i) for i in range(tensor.ShapeLength())]
@@ -68,16 +68,17 @@ class MXModel:
         
         dtype = tensor_type_map[tensor.Type()]
         if o == 0:
-            return mx.zeros(shape, dtype)
+            self.arrays[i] = mx.zeros(shape, dtype)
+            return
         offset = buf._tab.Vector(o)
         count = buf._tab.VectorLen(o)
-        return mx.array(memoryview(buf._tab.Bytes[offset : offset + count]).cast(tensor_type_cast[tensor.Type()], shape=shape), dtype)
+        self.arrays[i] = mx.array(memoryview(buf._tab.Bytes[offset : offset + count]).cast(tensor_type_cast[tensor.Type()], shape=shape), dtype)
 
     def set_array(self, index: int, value: mx.array, try_reshape=False):
         if index not in self.arrays:
-            self.arrays[index] = value
+            raise ValueError(f"array {index} does not exist")
         t = self.arrays[index]
-        if t is not None and math.prod(t.shape) != math.prod(value.shape):
+        if math.prod(t.shape) != math.prod(value.shape):
             raise ValueError(
                 f"shape mismatch: expected={t.shape} got={value.shape} tensor={index}"
             )
@@ -110,19 +111,21 @@ class MXSubGraph:
 
     def init_arrays(self):
         for i in range(self.graph.TensorsLength()):
-            self.model.set_array(i, self.model.init_array(self.graph.Tensors(i)))
+            self.model.init_array(i, self.graph.Tensors(i))
 
     def __call__(self, ins: List[mx.array]) -> List[mx.array]:
         ins = ins if isinstance(ins, List) else [ins] 
         for i, _in in zip(range(self.graph.InputsLength()), ins):
             if DEBUG:
-                print(f"INPUT: i={i} shape={self.tensors[self.graph.Inputs(i)].shape}")
+                print(f"INPUT: i={i} shape={self.model.get_array(self.graph.Inputs(i)).shape}")
             self.model.set_array(self.graph.Inputs(i), _in)
 
         for i in range(self.graph.OperatorsLength()):
             op = self.graph.Operators(i)
             in_tensors = [self.model.get_array(op.Inputs(j)) for j in range(op.InputsLength())]
             func, opt = self.model.get_op(op.OpcodeIndex(), op.BuiltinOptions())
+            if DEBUG:
+                print(f"\t Running: {func.__name__}")
             res = func(in_tensors, opt) if opt is not None else func(in_tensors)
             if res is None:
                 raise ValueError(f"got no result for op_code={op.OpcodeIndex()}")

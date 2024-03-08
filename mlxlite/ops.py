@@ -188,6 +188,7 @@ def op_minimum(ins: List[mx.array], options: MaximumMinimumOptions):
     return mx.minimum(ins[0], ins[1])
 
 def op_gather(ins: List[mx.array], options: GatherOptions):
+    assert(options.BatchDims() == 0, "batch_dims not supported")
     return mx.take(ins[0], ins[1], axis=options.Axis())
 
 def op_logistic(ins: List[mx.array]):
