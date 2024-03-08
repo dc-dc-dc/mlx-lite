@@ -10,13 +10,13 @@ from typing import List, Tuple
 
 np.random.seed(0)
 
-def generate_op_file(op: str, input_shapes: List[Tuple[int]]) -> str:
+def generate_op_file(op: str, input_shapes: List[Tuple[int]], **options) -> str:
     if getattr(keras.layers, op, None) is None:
         print(f"Invalid operation {op}")
         exit(1)
 
     in_tensors = [keras.layers.Input(shape=x[1:], batch_size=x[0]) for x in input_shapes]
-    out = getattr(keras.layers, op)()(
+    out = getattr(keras.layers, op)(**options)(
         in_tensors[0] if len(in_tensors) == 1 else in_tensors
     )
     model = keras.models.Model(inputs=in_tensors, outputs=out)
