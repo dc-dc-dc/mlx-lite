@@ -7,5 +7,6 @@ setup(
     python_requires=">=3.8",
     packages=find_packages(where="mlxlite"),
     install_requires=["mlx", "flatbuffers"],
+    extras_require={"test": ["tensorflow==2.15.0"]},
     include_package_data=True
 )

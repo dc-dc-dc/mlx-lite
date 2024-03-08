@@ -21,3 +21,5 @@ fi
 flatc --swift -o swift/Sources/MLXLite schema.fbs
 flatc --cpp -o cpp/src/ schema.fbs
 flatc --python -o mlxlite/generated schema.fbs
+find mlxlite/generated -name "*.py" -exec sed -i'' -e 's|from tflite|from mlxlite.generated.tflite|g' {} \;  
+rm mlxlite/generate/tflite/*.py-e # remove the backups created

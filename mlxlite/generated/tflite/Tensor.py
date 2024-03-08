@@ -81,7 +81,7 @@ class Tensor(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
         if o != 0:
             x = self._tab.Indirect(o + self._tab.Pos)
-            from tflite.QuantizationParameters import QuantizationParameters
+            from mlxlite.generated.tflite.QuantizationParameters import QuantizationParameters
             obj = QuantizationParameters()
             obj.Init(self._tab.Bytes, x)
             return obj
@@ -99,7 +99,7 @@ class Tensor(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             x = self._tab.Indirect(o + self._tab.Pos)
-            from tflite.SparsityParameters import SparsityParameters
+            from mlxlite.generated.tflite.SparsityParameters import SparsityParameters
             obj = SparsityParameters()
             obj.Init(self._tab.Bytes, x)
             return obj
@@ -146,7 +146,7 @@ class Tensor(object):
             x = self._tab.Vector(o)
             x += flatbuffers.number_types.UOffsetTFlags.py_type(j) * 4
             x = self._tab.Indirect(x)
-            from tflite.VariantSubType import VariantSubType
+            from mlxlite.generated.tflite.VariantSubType import VariantSubType
             obj = VariantSubType()
             obj.Init(self._tab.Bytes, x)
             return obj

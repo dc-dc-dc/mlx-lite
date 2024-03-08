@@ -14,8 +14,7 @@ jobs:
         python-version: 3.8
     - name: Install dependencies
       run: |
-        pip install .
-        pip install tensorflow
+        pip install '.[test]'
     - name: Run tests
       run: |
         python tests/test_op.py
